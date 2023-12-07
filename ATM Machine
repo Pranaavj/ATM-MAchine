@@ -1,0 +1,184 @@
+.data
+prompt_card: .asciiz "Enter your 16-digit card number: "
+prompt_password: .asciiz "Enter your 4-digit password: "
+promptRetryExit: .asciiz "Press 1 to retry, 2 to exit: "
+errorMsg: .asciiz "Invalid input. Please enter numeric values."
+errorMsgPassword: .asciiz "Invalid password. Please enter a 4-digit number."
+welcomeMsg: .asciiz "Authorization granted. Welcome!\n"
+deniedMsg: .asciiz "Authorization denied. Invalid card number or password. Please try again.\n"
+exitMsg: .asciiz "Exiting the program."
+
+
+
+.data
+database: 
+    .word 1111111111111111
+    .word 1234
+    .word 2222222222222222
+    .word 2345
+    .word 3333333333333333 
+    .word 3456
+    .word 4444444444444444 
+    .word 4567
+    .word 5555555555555555 
+    .word 5678
+    .word 6666666666666666 
+    .word 6789
+    .word 7777777777777777 
+    .word 7890
+    .word 8888888888888888 
+    .word 8901
+    .word 9999999999999999 
+    .word 9012
+    .word 0000000000000000 
+    .word 2109
+    .word 1211111111111111 
+    .word 1098
+    .word 1121111111111111 
+    .word 9876
+    .word 1112111111111111 
+    .word 8765
+    .word 1111211111111111 
+    .word 7654
+    .word 1111121111111111 
+    .word 6543
+    .word 1111112111111111 
+    .word 5432
+    .word 1111111121111111 
+    .word 4321
+    .word 1111111112111111 
+    .word 3210
+    .word 1111111111121111 
+    .word 1290
+    .word 1111111111112111 
+    .word 3478
+
+.data
+login_attempts: .word 0  # Counter for login attempts
+database_ptr: .word 0  # Pointer to the current position in the database
+
+.text
+.globl main
+
+main:
+    # Initialize BankDatabase
+    la $t0, database
+    sw $t0, database_ptr
+
+    loop:
+        # Get card number
+        jal getInputCard
+        move $s0, $v0
+
+        # Check for program exit
+        li $t0, -1
+        beq $s0, $t0, exitProgram
+
+        # Get password
+        jal getInputPassword
+        move $s1, $v0
+
+        # Check authorization with limited attempts
+        jal authorizeCardWithAttempts
+        move $s2, $v0
+
+        # Display result
+        beqz $s2, authorizationDenied
+        li $v0, 4
+        la $a0, welcomeMsg
+        syscall
+        j exitProgram
+
+    authorizationDenied:
+        # Increment login attempts counter
+        lw $t0, login_attempts
+        addi $t0, $t0, 1
+        sw $t0, login_attempts
+
+        # Check if the maximum attempts (3) are reached
+        li $t1, 3
+        bge $t0, $t1, exitProgram
+
+        li $v0, 4
+        la $a0, deniedMsg
+        syscall
+
+        # Ask the user whether to retry or exit
+        li $v0, 4
+        la $a0, promptRetryExit
+        syscall
+
+        # Get user's choice (1 for retry, 2 for exit)
+        li $v0, 5
+        syscall
+        move $t2, $v0
+
+        # Branch based on user's choice
+        beq $t2, 1, loop  # Retry
+        j exitProgram     # Exit
+
+    exitProgram:
+        li $v0, 4
+        la $a0, exitMsg
+        syscall
+        li $v0, 10
+        syscall
+
+# Function to get card number input
+getInputCard:
+    li $v0, 4
+    la $a0, prompt_card
+    syscall
+
+    # Get input
+    li $v0, 5
+    syscall
+
+    # Return the input value
+    move $v0, $v0
+    jr $ra
+
+# Function to get password input
+getInputPassword:
+    li $v0, 4
+    la $a0, prompt_password
+    syscall
+
+    # Get input
+    li $v0, 5
+    syscall
+
+    # Return the input value
+    move $v0, $v0
+    jr $ra
+
+# Function to authorize card with limited attempts
+authorizeCardWithAttempts:
+    lw $t0, database_ptr  # Load the address of the database
+    li $t1, 0  # Initialize index to 0
+    li $t2, 0  # Initialize attempts counter to 0
+
+authorizeLoopWithAttempts:
+    lw $t3, ($t0)  # Load the card number
+    beqz $t3, authorizationDenied  # If card number is 0, end of database reached
+
+    beq $s0, $t3, cardNumberMatchWithAttempts
+    j nextCardWithAttempts
+
+    cardNumberMatchWithAttempts:
+        lw $t3, 4($t0)  # Load the password
+        beq $s1, $t3, passwordMatchWithAttempts
+        j nextCardWithAttempts
+
+    passwordMatchWithAttempts:
+        li $v0, 1
+        li $a0, 1  # Set $a0 to true (authorization granted)
+        jr $ra
+
+    nextCardWithAttempts:
+        addi $t0, $t0, 8  # Move to the next card in the database
+        addi $t1, $t1, 1  # Increment index
+        # Check if attempts exceed the limit
+        li $t4, 3
+        bge $t1, $t4, authorizationDenied
+        j authorizeLoopWithAttempts
